@@ -465,15 +465,14 @@ export async function loadWorldbookEntries(panel) {
     container.empty();
     totalEntries = allEntries.length;
 
-<<<<<<< HEAD
     // [新功能] 迁移逻辑：首次加载时，将当前所有条目设为未选中（加入禁用列表），
-    // 从而实现“默认全不勾选，新增条目自动勾选”的效果。
+    // 从而实现"默认全不勾选，新增条目自动勾选"的效果。
     if (this_chid !== -1 && characters[this_chid]) {
         const charSettings = characters[this_chid].data?.extensions?.[extensionName]?.apiSettings || {};
         
         // 检查是否已经迁移过
         if (!charSettings._legacyEntriesMigrated) {
-            console.log(`[${extensionName}] 检测到首次运行新逻辑，正在将现有条目迁移为“未选中”状态...`);
+            console.log(`[${extensionName}] 检测到首次运行新逻辑，正在将现有条目迁移为"未选中"状态...`);
             
             const newDisabledEntries = {};
             // 将所有找到的条目加入禁用列表，但排除被屏蔽的条目
@@ -514,8 +513,6 @@ export async function loadWorldbookEntries(panel) {
         }
     }
 
-=======
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
     if (totalEntries === 0) {
       container.html('<p class="notes">所选世界书没有条目。</p>');
       countDisplay.text('0 条目.');
@@ -1908,11 +1905,8 @@ export function initializeBindings() {
       panel.find('#qrf_extract_tags').val(presetData.extractTags);
       panel.find('#qrf_min_length').val(presetData.minLength);
       panel.find('#qrf_context_turn_count').val(presetData.contextTurnCount);
-<<<<<<< HEAD
-      renderRelayFlows(panel, presetData.relayFlows);
-=======
       panel.find('#qrf_worldbook_char_limit').val(presetData.worldbookCharLimit);
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
+      renderRelayFlows(panel, presetData.relayFlows);
 
       // 2. 直接、同步地覆盖apiSettings中的内容
       // saveSetting现在是异步的，我们需要等待它完成

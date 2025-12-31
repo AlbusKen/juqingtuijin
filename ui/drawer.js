@@ -27,16 +27,74 @@ export async function createDrawer() {
         </div>
     `;
 
-    // 将面板添加到SillyTavern的扩展设置区域
-    $('#extensions_settings2').append(extensionHtml);
+    // 将面板添加到SillyTavern的扩展设置区域（兼容不同版本）
+    const $extensionSettings = $('#extensions_settings2').length > 0 
+        ? $('#extensions_settings2') 
+        : $('#extensions_settings');
+    $extensionSettings.append(extensionHtml);
 
     try {
         const contentWrapper = $('#qrf_extension_frame .inline-drawer-content');
-        // Use a more explicit cache busting parameter and log it
-        const fetchUrl = `/${extensionFolderPath}/settings.html?nocache=${Date.now()}`;
-        console.log(`[${extensionName}] Fetching settings panel from: ${fetchUrl}`);
         
-        const settingsPanelHtml = await $.get(fetchUrl);
+        // 使用 import.meta.url 获取当前模块的基础路径
+        let basePath = '';
+        try {
+            const currentScriptUrl = import.meta.url;
+            // 从 drawer.js 的路径推导出 settings.html 的路径
+            // drawer.js 在 ui/ 目录下，settings.html 在根目录
+            basePath = currentScriptUrl.replace(/\/ui\/drawer\.js.*$/, '');
+            console.log(`[${extensionName}] 检测到基础路径: ${basePath}`);
+        } catch (e) {
+            console.log(`[${extensionName}] 无法使用 import.meta.url，使用默认路径`);
+        }
+        
+        // 尝试多个可能的路径（SillyTavern 不同版本和配置可能使用不同路径）
+        const possiblePaths = [
+            basePath ? `${basePath}/settings.html` : null,
+            // 标准第三方扩展路径
+            `/${extensionFolderPath}/settings.html`,
+            `/scripts/extensions/third-party/${extensionName}/settings.html`,
+            `scripts/extensions/third-party/${extensionName}/settings.html`,
+            // SillyTavern 1.12+ 可能使用的路径
+            `/extensions/third-party/${extensionName}/settings.html`,
+            `extensions/third-party/${extensionName}/settings.html`,
+            // 相对于根目录的路径
+            `./scripts/extensions/third-party/${extensionName}/settings.html`,
+            `../../../settings.html`,
+            `../../settings.html`,
+            `../settings.html`,
+            `./settings.html`,
+        ].filter(Boolean);
+        
+        let settingsPanelHtml = null;
+        let successPath = null;
+        let lastError = null;
+        
+        for (const path of possiblePaths) {
+            const fetchUrl = `${path}?v=${Date.now()}`;
+            console.log(`[${extensionName}] 尝试加载设置面板: ${fetchUrl}`);
+            try {
+                // 使用原生 fetch API
+                const response = await fetch(fetchUrl);
+                if (response.ok) {
+                    settingsPanelHtml = await response.text();
+                    successPath = fetchUrl;
+                    break;
+                } else {
+                    lastError = `HTTP ${response.status}`;
+                    console.log(`[${extensionName}] 路径 ${fetchUrl} 返回 ${response.status}`);
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log(`[${extensionName}] 路径 ${fetchUrl} 加载失败: ${e.message}`);
+            }
+        }
+        
+        if (!settingsPanelHtml) {
+            throw new Error(`无法从任何路径加载 settings.html (最后错误: ${lastError})`);
+        }
+        
+        console.log(`[${extensionName}] 成功从 ${successPath} 加载设置面板`);
         contentWrapper.html(settingsPanelHtml);
 
         // 初始化UI数据绑定和事件

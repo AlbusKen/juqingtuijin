@@ -1,6 +1,6 @@
 // utils/googleAdapter.js
 // Google API适配器模块
-const extensionName = 'quick-response-force';
+const extensionName = 'shujuku';
 
 /**
  * 构建Google API请求

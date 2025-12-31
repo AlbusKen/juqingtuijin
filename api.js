@@ -3,7 +3,7 @@
 import { getRequestHeaders } from '/script.js';
 import { getContext } from '/scripts/extensions.js';
 
-const extensionName = 'quick-response-force';
+const extensionName = 'shujuku';
 
 /**
  * 统一处理和规范化API响应数据。
@@ -40,11 +40,7 @@ function normalizeApiResponse(responseData) {
 /**
  * 主API调用入口，根据设置选择不同的模式
  */
-<<<<<<< HEAD
-export async function callInterceptionApi(messages, apiSettings, abortSignal) {
-=======
 export async function callInterceptionApi(messages, apiSettings, abortSignal = null) {
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
   // messages 已经在 index.js 中构建完成，直接使用
   // apiSettings 包含API连接配置
 

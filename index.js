@@ -10,7 +10,7 @@ import { extension_settings, getContext } from '/scripts/extensions.js';
 
 console.log('[剧情优化大师] v3.5.1 Loading... (Timestamp: ' + Date.now() + ')');
 
-const extension_name = 'quick-response-force';
+const extension_name = 'shujuku';
 let isProcessing = false;
 let tempPlotToSave = null; // [架构重构] 用于在生成和消息创建之间临时存储plot
 let currentAbortController_QRF = null; // [新增] 用于中止正在进行的AI请求（剧情规划）
@@ -90,8 +90,7 @@ const planningGuard = {
   ignoreNextGenerationEndedCount: 0,
 };
 
-// [新功能] 规划任务中止控制器
-let abortController = null;
+// [新功能] 规划任务中止控制器（已重命名为 currentAbortController_QRF）
 
 /**
  * 将从 st-memory-enhancement 获取的原始表格JSON数据转换为更适合LLM读取的文本格式。
@@ -668,10 +667,11 @@ async function runOptimizationLogic(userMessage) {
       return null; // 插件未启用，直接返回
     }
 
-    // 重置中止控制器（规划阶段统一使用 abortController）
-    abortController = new AbortController();
+// 重置中止控制器与标志（参考数据库版本的终止按钮行为）
+    wasStoppedByUser_QRF = false;
+    currentAbortController_QRF = new AbortController();
 
-    // 创建带“终止”按钮的 Toast（与面板按钮同风格）
+    // 创建带"终止"按钮的 Toast
     const toastMsg = `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <span class="toastr-message">正在规划剧情...</span>
@@ -690,16 +690,16 @@ async function runOptimizationLogic(userMessage) {
       progressBar: false,
     });
 
-    // 绑定终止按钮（优先绑定当前 toast 内按钮）
+    // 绑定终止按钮（优先绑定当前 toast 内按钮，避免误绑到旧 toast）
     setTimeout(() => {
       const $abortBtn = ($toast && $toast.find) ? $toast.find('.qrf-abort-btn') : $('.qrf-abort-btn');
       if ($abortBtn.length > 0) {
         $abortBtn.off('click').on('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          try {
-            abortController?.abort();
-          } catch (err) {}
+
+          wasStoppedByUser_QRF = true;
+          if (currentAbortController_QRF) currentAbortController_QRF.abort();
 
           try {
             if ($toast) toastr.clear($toast);
@@ -707,8 +707,11 @@ async function runOptimizationLogic(userMessage) {
             if ($toastDom && $toastDom.length) $toastDom.remove();
           } catch (err) {}
 
-          isProcessing = false; // 强制释放锁，避免卡死
-          setTimeout(() => toastr.info('规划任务已被用户中止。', '提示', { timeOut: 1500 }), 150);
+          // 强制释放锁，避免卡死
+          isProcessing = false;
+
+          // 用户主动终止属于正常流程，不弹"错误"
+          setTimeout(() => toastr.info('规划任务已被用户中止。', '提示', { timeOut: 1500 }), 300);
         });
       }
     }, 0);
@@ -965,7 +968,7 @@ async function runOptimizationLogic(userMessage) {
       for (let i = 0; i < relayFlows.length; i++) {
         const flow = relayFlows[i];
         if (!flow.enabled) continue;
-        if (abortController?.signal?.aborted) throw new Error('TaskAbortedByUser');
+        if (wasStoppedByUser_QRF) throw new Error('TaskAbortedByUser');
 
         $toast.find('.toastr-message').text(`正在规划剧情... (接力流程：${flow.injectKey})`);
 
@@ -981,7 +984,7 @@ async function runOptimizationLogic(userMessage) {
 
         const overrides = flow.apiProfileId ? getApiProfileOverrides(flow.apiProfileId) : null;
         const flowApiSettings = { ...apiSettings, ...(overrides || {}), extractTags: '' };
-        const flowResult = await callInterceptionApi(flowMessages, flowApiSettings, abortController.signal);
+        const flowResult = await callInterceptionApi(flowMessages, flowApiSettings, currentAbortController_QRF?.signal);
         // null 表示中止或错误：不覆盖旧输出
         if (flowResult !== null && flowResult !== undefined) {
           // 每个流程可配置独立的标签摘取：注入/保存的是提取后的内容；留空则保存全量
@@ -1032,7 +1035,7 @@ async function runOptimizationLogic(userMessage) {
 
     // 检查中止信号的帮助函数
     const checkAbort = () => {
-        if (abortController && abortController.signal.aborted) {
+        if (currentAbortController_QRF && currentAbortController_QRF.signal.aborted) {
             throw new Error('TaskAbortedByUser');
         }
     };
@@ -1042,7 +1045,9 @@ async function runOptimizationLogic(userMessage) {
 
     if (minLength > 0) {
       for (let i = 0; i < maxRetries; i++) {
-        checkAbort();
+        if (wasStoppedByUser_QRF) {
+          throw new Error('TaskAbortedByUser');
+        }
         $toast.find('.toastr-message').text(`正在规划剧情... (尝试 ${i + 1}/${maxRetries})`);
         
         if (willUseMainApiGenerateRaw) {
@@ -1050,9 +1055,7 @@ async function runOptimizationLogic(userMessage) {
         }
 
         // 直接传递构建好的 messages 数组
-        const tempMessage = await callInterceptionApi(messages, finalApiSettings, abortController.signal);
-        
-        checkAbort(); // API 调用后再次检查
+        const tempMessage = await callInterceptionApi(messages, finalApiSettings, currentAbortController_QRF?.signal);
         if (tempMessage && tempMessage.length >= minLength) {
           processedMessage = tempMessage;
           if ($toast) toastr.clear($toast);
@@ -1065,12 +1068,13 @@ async function runOptimizationLogic(userMessage) {
         }
       }
     } else {
-      checkAbort();
+      if (wasStoppedByUser_QRF) {
+        throw new Error('TaskAbortedByUser');
+      }
       if (willUseMainApiGenerateRaw) {
         planningGuard.ignoreNextGenerationEndedCount++;
       }
-      processedMessage = await callInterceptionApi(messages, finalApiSettings, abortController.signal);
-      checkAbort();
+      processedMessage = await callInterceptionApi(messages, finalApiSettings, currentAbortController_QRF?.signal);
     }
 
     if (processedMessage) {
@@ -1114,9 +1118,10 @@ async function runOptimizationLogic(userMessage) {
       return null;
     }
   } catch (error) {
-    if (error.message === 'TaskAbortedByUser') {
-        // 用户中止，返回特殊标记对象
-        return { aborted: true };
+    if (error?.message === 'TaskAbortedByUser') {
+      // 用户主动终止：正常流程，不提示"规划失败"
+      if ($toast) toastr.clear($toast);
+      return null;
     }
     console.error(`[${extension_name}] 在核心优化逻辑中发生错误:`, error);
     if ($toast) toastr.clear($toast);
@@ -1124,7 +1129,7 @@ async function runOptimizationLogic(userMessage) {
     return null;
   } finally {
       planningGuard.inProgress = false;
-      abortController = null;
+      currentAbortController_QRF = null;
   }
 }
 
@@ -1406,8 +1411,8 @@ jQuery(async () => {
         $(document).off('click', '.qrf-abort-btn').on('click', '.qrf-abort-btn', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            if (abortController) {
-                abortController.abort();
+            if (currentAbortController_QRF) {
+                currentAbortController_QRF.abort();
                 console.log(`[${extension_name}] 用户手动中止了规划任务。`);
                 
                 // [新增] 尝试发送停止指令给后端

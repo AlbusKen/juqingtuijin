@@ -1,7 +1,7 @@
 // 快速响应部队 - 插件设置
 // 由Cline移植并重构
 
-export const extensionName = 'quick-response-force';
+export const extensionName = 'shujuku';
 
 export const defaultSettings = {
   enabled: true,
@@ -133,7 +133,6 @@ export const defaultSettings = {
     rateErotic: 0,
     rateCuckold: 10,
     selectedWorldbooks: [], // 新增：存储选中的世界书
-<<<<<<< HEAD
     disabledWorldbookEntries: '__ALL_SELECTED__', // [功能更新] 默认全选所有条目，支持屏蔽词过滤
     // [新增] 接力思考流程：多套提示词链式执行，并把输出缓存到 $A1/$A2... 供后续提示词注入
     // 数据结构:
@@ -146,9 +145,6 @@ export const defaultSettings = {
     //   lastOutput: string, // 最新一次执行输出（会被覆盖）
     // }>
     relayFlows: [],
-=======
-    disabledWorldbookEntries: '__ALL_SELECTED__', // 默认全选，若有取消勾选则记录 { worldbookName: [uid1, uid2] }
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
     prompts: [
       {
         id: 1764467961649,
