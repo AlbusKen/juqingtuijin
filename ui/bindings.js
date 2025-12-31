@@ -465,50 +465,28 @@ export async function loadWorldbookEntries(panel) {
     container.empty();
     totalEntries = allEntries.length;
 
-    // [新功能] 迁移逻辑：首次加载时，将当前所有条目设为未选中（加入禁用列表），
-    // 从而实现"默认全不勾选，新增条目自动勾选"的效果。
+    // [功能更新] 迁移逻辑：首次加载时，设置为"全勾选"状态，
+    // 从而实现"默认全勾选，用户取消勾选的条目才会被禁用"的效果。
     if (this_chid !== -1 && characters[this_chid]) {
         const charSettings = characters[this_chid].data?.extensions?.[extensionName]?.apiSettings || {};
         
         // 检查是否已经迁移过
         if (!charSettings._legacyEntriesMigrated) {
-            console.log(`[${extensionName}] 检测到首次运行新逻辑，正在将现有条目迁移为"未选中"状态...`);
+            console.log(`[${extensionName}] 检测到首次运行新逻辑，正在将所有条目设为"全勾选"状态...`);
             
-            const newDisabledEntries = {};
-            // 将所有找到的条目加入禁用列表，但排除被屏蔽的条目
-            allEntries.forEach(entry => {
-                // 检查是否被屏蔽
-                const comment = entry?.comment || entry?.name || '';
-                let normalizedComment = String(comment).replace(/^ACU-\[[^\]]+\]-/, '');
-                normalizedComment = normalizedComment.replace(/^外部导入-(?:[^-]+-)?/, '');
-                const isDbGenerated =
-                  normalizedComment.startsWith('TavernDB-ACU-') ||
-                  normalizedComment.startsWith('总结条目') ||
-                  normalizedComment.startsWith('小总结条目') ||
-                  normalizedComment.startsWith('重要人物条目');
-
-                // 如果不是数据库生成条目且包含屏蔽词，则不加入禁用列表（因为这些条目不会在UI中显示）
-                if (!isDbGenerated && isEntryBlocked_ACU(entry)) {
-                  return;
-                }
-
-                if (!newDisabledEntries[entry.bookName]) {
-                    newDisabledEntries[entry.bookName] = [];
-                }
-                newDisabledEntries[entry.bookName].push(entry.uid);
-            });
+            // 使用特殊符号 '__ALL_SELECTED__' 标识全勾选状态（与全选按钮行为一致）
+            const newDisabledEntries = '__ALL_SELECTED__';
 
             // 保存设置
-            // 注意：这里需要await，但loadWorldbookEntries本身是async的
             await saveSetting('disabledWorldbookEntries', newDisabledEntries);
             await saveSetting('_legacyEntriesMigrated', true);
 
             // 更新当前内存中的变量，以便立即渲染正确状态
-            disabledEntries = newDisabledEntries;
-            isAllSelected = false;
+            disabledEntries = {};
+            isAllSelected = true;
 
             if (totalEntries > 0) {
-                toastr.info('当前剧情推进插件已根据新策略将插件内部读取的所有世界书条目初始化为未选中状态。后续新增的条目将自动选中。（请同时使用数据库插件的用户在有旧对话的角色卡里及时重新勾选上3个索引条目！！）', '世界书状态重置', { timeOut: 10000, extendedTimeOut: 5000 });
+                toastr.info('剧情推进插件已将世界书条目初始化为全勾选状态。如需排除某些条目，请手动取消勾选。', '世界书状态初始化', { timeOut: 5000 });
             }
         }
     }
