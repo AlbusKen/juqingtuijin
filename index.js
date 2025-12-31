@@ -667,7 +667,7 @@ async function runOptimizationLogic(userMessage) {
       return null; // 插件未启用，直接返回
     }
 
-// 重置中止控制器与标志（参考数据库版本的终止按钮行为）
+    // 重置中止控制器与标志（参考数据库版本的终止按钮行为）
     wasStoppedByUser_QRF = false;
     currentAbortController_QRF = new AbortController();
 
@@ -822,17 +822,33 @@ async function runOptimizationLogic(userMessage) {
 
     // ---- 接力思考流程（$A1/$A2...）----
     const deepClone = obj => JSON.parse(JSON.stringify(obj));
-    // 多标签提取规则：对每个标签分别取“最后一个匹配到的完整标签块”，再按标签顺序拼接
+    // 多标签提取规则：对每个标签分别取"最后一个匹配到的完整标签块"，再按标签顺序拼接
+    // 自动去重：同一个标签名（大小写不敏感）只处理一次
+    // 重要：使用否定前瞻确保标签内部不包含同名开始标签（处理未闭合标签的情况）
     const extractLastBlocksPerTag = (text, tagNames) => {
       if (!text || !Array.isArray(tagNames) || tagNames.length === 0) return null;
-      const parts = [];
+      
+      // 去重：确保同一个标签名只处理一次（大小写不敏感）
+      const uniqueTagNames = [];
+      const seen = new Set();
       for (const tagNameRaw of tagNames) {
         const tagName = String(tagNameRaw || '').trim();
         if (!tagName) continue;
+        const lowerTagName = tagName.toLowerCase();
+        if (seen.has(lowerTagName)) continue;
+        seen.add(lowerTagName);
+        uniqueTagNames.push(tagName);
+      }
+      
+      const parts = [];
+      for (const tagName of uniqueTagNames) {
         const safeTagName = escapeRegExp(tagName);
-        const regex = new RegExp(`(<${safeTagName}[^>]*>[\\s\\S]*?<\\/${safeTagName}>)`, 'gi');
+        // 改进的正则：使用否定前瞻，确保标签内部不包含同名的开始标签
+        // 这样可以正确处理"第一个标签未闭合，但后面有闭合的同名标签"的情况
+        const regex = new RegExp(`(<${safeTagName}[^>]*>(?:(?!<${safeTagName}[^>]*>)[\\s\\S])*?<\\/${safeTagName}>)`, 'gi');
         const matches = Array.from(text.matchAll(regex));
         if (matches.length > 0) {
+          // 只取最后一个匹配
           const last = matches[matches.length - 1];
           const block = last?.[1] || last?.[0];
           if (block) parts.push(block);
