@@ -1,0 +1,19 @@
+{
+    "name": "剧情优化大师",
+    "display_name": "剧情优化大师",
+<<<<<<< HEAD
+    "version": "2.1.2",
+=======
+    "version": "3.5.1",
+>>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
+    "author": "Cline",
+    "description": "一个独立的聊天优化插件，通过在生成前预处理用户输入，增强上下文和关键词，从而提升故事叙述的质量。",
+    "minSillyTavernVersion": "1.10.0",
+    "requires": [],
+    "loading_order": 101,
+    "js": "index.js",
+    "css": "style.css",
+    "persistent_files": [
+        "settings.json"
+    ]
+}
