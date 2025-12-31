@@ -668,12 +668,10 @@ async function runOptimizationLogic(userMessage) {
       return null; // 插件未启用，直接返回
     }
 
-<<<<<<< HEAD
-    // 重置中止控制器与标志（参考数据库版本的终止按钮行为）
-    wasStoppedByUser_QRF = false;
-    currentAbortController_QRF = new AbortController();
+    // 重置中止控制器（规划阶段统一使用 abortController）
+    abortController = new AbortController();
 
-    // 创建带“终止”按钮的 Toast
+    // 创建带“终止”按钮的 Toast（与面板按钮同风格）
     const toastMsg = `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <span class="toastr-message">正在规划剧情...</span>
@@ -692,16 +690,16 @@ async function runOptimizationLogic(userMessage) {
       progressBar: false,
     });
 
-    // 绑定终止按钮（优先绑定当前 toast 内按钮，避免误绑到旧 toast）
+    // 绑定终止按钮（优先绑定当前 toast 内按钮）
     setTimeout(() => {
       const $abortBtn = ($toast && $toast.find) ? $toast.find('.qrf-abort-btn') : $('.qrf-abort-btn');
       if ($abortBtn.length > 0) {
         $abortBtn.off('click').on('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
-
-          wasStoppedByUser_QRF = true;
-          if (currentAbortController_QRF) currentAbortController_QRF.abort();
+          try {
+            abortController?.abort();
+          } catch (err) {}
 
           try {
             if ($toast) toastr.clear($toast);
@@ -709,33 +707,11 @@ async function runOptimizationLogic(userMessage) {
             if ($toastDom && $toastDom.length) $toastDom.remove();
           } catch (err) {}
 
-          // 强制释放锁，避免卡死
-          isProcessing = false;
-
-          // 用户主动终止属于正常流程，不弹“错误”
-          setTimeout(() => toastr.info('规划任务已被用户中止。', '提示', { timeOut: 1500 }), 300);
+          isProcessing = false; // 强制释放锁，避免卡死
+          setTimeout(() => toastr.info('规划任务已被用户中止。', '提示', { timeOut: 1500 }), 150);
         });
       }
     }, 0);
-=======
-    // 重置中止控制器
-    abortController = new AbortController();
-
-    // 创建带中止按钮的 Toast
-    const toastMsg = `
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span class="toastr-message" style="margin-right: 10px;">正在规划剧情...</span>
-            <button class="qrf-abort-btn">终止</button>
-        </div>
-    `;
-    
-    $toast = toastr.info(toastMsg, '', {
-        timeOut: 0,
-        extendedTimeOut: 0,
-        escapeHtml: false,
-        tapToDismiss: false
-    });
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
 
     const context = getContext();
     const character = characters[this_chid];
@@ -989,7 +965,7 @@ async function runOptimizationLogic(userMessage) {
       for (let i = 0; i < relayFlows.length; i++) {
         const flow = relayFlows[i];
         if (!flow.enabled) continue;
-        if (wasStoppedByUser_QRF) throw new Error('TaskAbortedByUser');
+        if (abortController?.signal?.aborted) throw new Error('TaskAbortedByUser');
 
         $toast.find('.toastr-message').text(`正在规划剧情... (接力流程：${flow.injectKey})`);
 
@@ -1005,7 +981,7 @@ async function runOptimizationLogic(userMessage) {
 
         const overrides = flow.apiProfileId ? getApiProfileOverrides(flow.apiProfileId) : null;
         const flowApiSettings = { ...apiSettings, ...(overrides || {}), extractTags: '' };
-        const flowResult = await callInterceptionApi(flowMessages, flowApiSettings, currentAbortController_QRF?.signal);
+        const flowResult = await callInterceptionApi(flowMessages, flowApiSettings, abortController.signal);
         // null 表示中止或错误：不覆盖旧输出
         if (flowResult !== null && flowResult !== undefined) {
           // 每个流程可配置独立的标签摘取：注入/保存的是提取后的内容；留空则保存全量
@@ -1066,13 +1042,7 @@ async function runOptimizationLogic(userMessage) {
 
     if (minLength > 0) {
       for (let i = 0; i < maxRetries; i++) {
-<<<<<<< HEAD
-        if (wasStoppedByUser_QRF) {
-          throw new Error('TaskAbortedByUser');
-        }
-=======
         checkAbort();
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
         $toast.find('.toastr-message').text(`正在规划剧情... (尝试 ${i + 1}/${maxRetries})`);
         
         if (willUseMainApiGenerateRaw) {
@@ -1080,14 +1050,9 @@ async function runOptimizationLogic(userMessage) {
         }
 
         // 直接传递构建好的 messages 数组
-<<<<<<< HEAD
-        const tempMessage = await callInterceptionApi(messages, finalApiSettings, currentAbortController_QRF?.signal);
-=======
         const tempMessage = await callInterceptionApi(messages, finalApiSettings, abortController.signal);
         
         checkAbort(); // API 调用后再次检查
-
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
         if (tempMessage && tempMessage.length >= minLength) {
           processedMessage = tempMessage;
           if ($toast) toastr.clear($toast);
@@ -1100,19 +1065,12 @@ async function runOptimizationLogic(userMessage) {
         }
       }
     } else {
-<<<<<<< HEAD
-      if (wasStoppedByUser_QRF) {
-        throw new Error('TaskAbortedByUser');
-      }
-      processedMessage = await callInterceptionApi(messages, finalApiSettings, currentAbortController_QRF?.signal);
-=======
       checkAbort();
       if (willUseMainApiGenerateRaw) {
         planningGuard.ignoreNextGenerationEndedCount++;
       }
       processedMessage = await callInterceptionApi(messages, finalApiSettings, abortController.signal);
       checkAbort();
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
     }
 
     if (processedMessage) {
@@ -1129,49 +1087,11 @@ async function runOptimizationLogic(userMessage) {
           .map(t => t.trim())
           .filter(t => t);
         if (tagNames.length > 0) {
-<<<<<<< HEAD
           const extracted = extractLastBlocksPerTag(processedMessage, tagNames);
           if (extracted) {
             messageForTavern = extracted;
             console.log(`[${extension_name}] 成功按标签分别摘取最后一次匹配: ${tagNames.join(', ')}`);
             toastr.info(`已成功按标签分别摘取最后一次匹配并注入。`, '标签摘取');
-=======
-          const extractedParts = [];
-
-          // [健全性] 仅提取“最后一组”标签的内容（支持处理类似 <key>123<key>456</key> 的异常嵌套）
-          // 规则：找到最后一个 </tag>，再回溯找到它之前最近的 <tag>，只取两者之间的内容。
-          const extractLastTagContent = (text, rawTagName) => {
-            if (!text || !rawTagName) return null;
-            const tagName = String(rawTagName).trim();
-            if (!tagName) return null;
-
-            const lower = text.toLowerCase();
-            const open = `<${tagName.toLowerCase()}>`;
-            const close = `</${tagName.toLowerCase()}>`;
-
-            const closeIdx = lower.lastIndexOf(close);
-            if (closeIdx === -1) return null;
-
-            const openIdx = lower.lastIndexOf(open, closeIdx);
-            if (openIdx === -1) return null;
-
-            const contentStart = openIdx + open.length;
-            const content = text.slice(contentStart, closeIdx);
-            return content;
-          };
-
-          tagNames.forEach(tagName => {
-            const content = extractLastTagContent(processedMessage, tagName);
-            if (content !== null) {
-              extractedParts.push(`<${tagName}>${content}</${tagName}>`);
-            }
-          });
-
-          if (extractedParts.length > 0) {
-            messageForTavern = extractedParts.join('\n\n');
-            console.log(`[${extension_name}] 成功摘取标签: ${tagNames.join(', ')}`);
-            toastr.info(`已成功摘取 [${tagNames.join(', ')}] 标签内容并注入。`, '标签摘取');
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
           } else {
             console.log(`[${extension_name}] 在回复中未找到指定标签: ${tagNames.join(', ')}`);
           }
@@ -1194,16 +1114,9 @@ async function runOptimizationLogic(userMessage) {
       return null;
     }
   } catch (error) {
-<<<<<<< HEAD
-    if (error?.message === 'TaskAbortedByUser') {
-      // 用户主动终止：正常流程，不提示“规划失败”
-      if ($toast) toastr.clear($toast);
-      return null;
-=======
     if (error.message === 'TaskAbortedByUser') {
         // 用户中止，返回特殊标记对象
         return { aborted: true };
->>>>>>> 9d9294a0040fefed67bebf2d6763acb7f1f2d288
     }
     console.error(`[${extension_name}] 在核心优化逻辑中发生错误:`, error);
     if ($toast) toastr.clear($toast);
