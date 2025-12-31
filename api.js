@@ -3,7 +3,7 @@
 import { getRequestHeaders } from '/script.js';
 import { getContext } from '/scripts/extensions.js';
 
-const extensionName = 'shujuku';
+const extensionName = 'juqingtuijin';
 
 /**
  * 统一处理和规范化API响应数据。

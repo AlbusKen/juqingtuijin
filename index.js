@@ -10,7 +10,7 @@ import { extension_settings, getContext } from '/scripts/extensions.js';
 
 console.log('[剧情优化大师] v3.5.1 Loading... (Timestamp: ' + Date.now() + ')');
 
-const extension_name = 'shujuku';
+const extension_name = 'juqingtuijin';
 let isProcessing = false;
 let tempPlotToSave = null; // [架构重构] 用于在生成和消息创建之间临时存储plot
 let currentAbortController_QRF = null; // [新增] 用于中止正在进行的AI请求（剧情规划）

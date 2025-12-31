@@ -4,6 +4,18 @@
 import { fetchModels, testApiConnection } from '../api.js';
 import { defaultSettings, extensionName } from '../utils/settings.js';
 
+// 动态检测扩展的基础路径（用于打开流程编辑器等新窗口）
+let detectedExtensionBasePath = '';
+try {
+  const currentScriptUrl = import.meta.url;
+  // 从 bindings.js 的路径推导出扩展根目录
+  // bindings.js 在 ui/ 目录下
+  detectedExtensionBasePath = currentScriptUrl.replace(/\/ui\/bindings\.js.*$/, '');
+  console.log(`[${extensionName}] 检测到扩展基础路径: ${detectedExtensionBasePath}`);
+} catch (e) {
+  console.log(`[${extensionName}] 无法使用 import.meta.url 检测路径，将使用默认路径`);
+}
+
 /**
  * [新增] 辅助函数：检查条目是否包含屏蔽词（与lore.js中的函数保持一致）
  * @param {object} entry - 世界书条目对象
@@ -881,8 +893,16 @@ function renderRelayFlows(panel, flows) {
 }
 
 function openRelayFlowEditor(flowId) {
-  const url = `scripts/extensions/third-party/${extensionName}/flow-editor.html?flowId=${encodeURIComponent(flowId)}`;
-  window.open(`/${url}`, `qrf_relay_flow_${flowId}`, 'width=980,height=760,resizable=yes,scrollbars=yes');
+  // 优先使用动态检测的路径，避免 404 问题
+  let editorUrl;
+  if (detectedExtensionBasePath) {
+    editorUrl = `${detectedExtensionBasePath}/flow-editor.html?flowId=${encodeURIComponent(flowId)}`;
+  } else {
+    // 回退到默认路径
+    editorUrl = `/scripts/extensions/third-party/${extensionName}/flow-editor.html?flowId=${encodeURIComponent(flowId)}`;
+  }
+  console.log(`[${extensionName}] 打开流程编辑器: ${editorUrl}`);
+  window.open(editorUrl, `qrf_relay_flow_${flowId}`, 'width=980,height=760,resizable=yes,scrollbars=yes');
 }
 
 async function saveRelayFlows(flows) {

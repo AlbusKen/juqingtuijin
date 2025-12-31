@@ -2,7 +2,7 @@
 // 世界书处理模块
 import { characters, this_chid } from '/script.js';
 
-const extensionName = 'shujuku';
+const extensionName = 'juqingtuijin';
 const blockedKeywords = ['规则', '思维链', 'cot', 'MVU', 'mvu', '变量', '状态', 'Status', 'Rule', 'rule', '检定', '判断', '叙事', '文风'];
 
 function isEntryBlocked(entry) {

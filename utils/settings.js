@@ -1,7 +1,7 @@
 // 快速响应部队 - 插件设置
 // 由Cline移植并重构
 
-export const extensionName = 'shujuku';
+export const extensionName = 'juqingtuijin';
 
 export const defaultSettings = {
   enabled: true,
