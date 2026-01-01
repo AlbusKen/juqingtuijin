@@ -818,6 +818,7 @@ async function runOptimizationLogic(userMessage) {
       $5: outlineTableContent, // [升级] $5专门用于总体/总结大纲表内容（含表头）
       $6: lastPlotContent, // [新增] 添加$6占位符及其内容
       $7: '', // [新增] $7用于前文上下文注入，稍后填充
+      $8: '', // [新增] $8用于本轮用户输入（从上下文中摘取出来单独注入）
     };
 
     // ---- 接力思考流程（$A1/$A2...）----
@@ -927,12 +928,12 @@ async function runOptimizationLogic(userMessage) {
     if (slicedContext && Array.isArray(slicedContext)) {
       fullHistory = [...slicedContext];
     }
-    if (userMessage) {
-      fullHistory.push({ role: 'user', content: userMessage });
-    }
     const formattedHistory = fullHistory.map(msg => `${msg.role}："${sanitizeHtml(msg.content)}"`).join(' \n ');
 
-    // 构建$7上下文注入内容（前文上下文 + 用户输入）
+    // $8：本轮用户输入（从上下文数据中摘取出来单独注入）
+    replacements.$8 = userMessage ? sanitizeHtml(userMessage) : '';
+
+    // 构建$7上下文注入内容（仅前文上下文；不包含本轮用户输入）
     const contextInjectionText = formattedHistory && formattedHistory.trim()
       ? `以下是前文的用户记录和故事发展，给你用作参考：\n ${formattedHistory}`
       : '';

@@ -159,12 +159,14 @@ export async function getCombinedWorldbookContent(context, apiSettings, userMess
       ? Math.max(1, apiSettings.contextTurnCount)
       : 3;
     const chatArray = Array.isArray(context.chat) ? context.chat : [];
-    const recentMessages = historyLimit > 0 ? chatArray.slice(-historyLimit) : chatArray;
-    const historyAndUserText = `${recentMessages.map(message => message.mes).join('\n')}\n${
-      userMessage || ''
-    }`.toLowerCase();
+    // 排除“本轮用户输入”（通常位于 chat 末尾），避免其参与世界书触发扫描
+    const chatWithoutCurrentUser =
+      chatArray.length > 0 && chatArray[chatArray.length - 1]?.is_user ? chatArray.slice(0, -1) : chatArray;
+
+    const recentMessages = historyLimit > 0 ? chatWithoutCurrentUser.slice(-historyLimit) : chatWithoutCurrentUser;
+    const historyText = `${recentMessages.map(message => message.mes).join('\n')}`.toLowerCase();
     const recursionAllowedConstantText = recursionAllowedConstants.map(e => e.content || '').join('\n').toLowerCase();
-    const initialScanText = [historyAndUserText, recursionAllowedConstantText, extraBaseLower].filter(Boolean).join('\n');
+    const initialScanText = [historyText, recursionAllowedConstantText, extraBaseLower].filter(Boolean).join('\n');
 
     const triggeredEntries = new Set([...constantEntries]);
     let recursionDepth = 0;
