@@ -1507,9 +1507,32 @@ export function initializeBindings() {
 
   // --- 提示词列表事件 ---
   
+  panel.on('click', '#qrf_reset_prompts_to_default_btn', function() {
+      if (!confirm('⚠️ 警告：这将重置所有提示词到默认状态！\n\n当前的所有提示词修改都将被清除，无法恢复。\n\n确定要继续吗？')) {
+          return;
+      }
+
+      // 重置为默认提示词
+      const defaultPrompts = JSON.parse(JSON.stringify(defaultSettings.apiSettings.prompts));
+
+      // 获取当前设置并更新提示词
+      const settings = extension_settings[extensionName] || {};
+      if (!settings.apiSettings) settings.apiSettings = {};
+      settings.apiSettings.prompts = defaultPrompts;
+
+      // 重新渲染提示词列表
+      renderPrompts(panel, defaultPrompts);
+
+      // 保存设置
+      saveSettingsImmediate();
+
+      // 提示用户
+      toastr.success('提示词已恢复到默认状态', '操作成功');
+  });
+
   panel.on('click', '#qrf_add_prompt_btn', function() {
       const container = $('#qrf_prompts_container');
-      
+
       const newPrompt = {
           id: Date.now().toString(),
           name: 'New Prompt',
@@ -1517,7 +1540,7 @@ export function initializeBindings() {
           content: '',
           deletable: true
       };
-      
+
       // 获取当前所有，添加新的，然后重绘
       const prompts = getPromptsFromUI();
       prompts.push(newPrompt);
