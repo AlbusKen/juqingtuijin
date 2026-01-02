@@ -810,6 +810,41 @@ async function runOptimizationLogic(userMessage) {
       }
     }
 
+    // [新增] 构建 $U (用户设定描述) 和 $C (角色描述) 占位符内容
+    // $U: 用户设定描述 (persona_description)
+    let userInfoContent = '';
+    try {
+      // 按优先级尝试获取 persona_description
+      // 1. 从 SillyTavern 全局对象获取 powerUserSettings
+      // 2. 从 window.power_user 获取（酒馆内部变量）
+      // 3. 从 context 获取（某些版本可能有）
+      const stContext = window.SillyTavern?.getContext?.();
+      userInfoContent = stContext?.powerUserSettings?.persona_description
+        || window.power_user?.persona_description
+        || context?.powerUserSettings?.persona_description
+        || '';
+      console.log(`[${extension_name}] $U (persona_description) 获取结果: ${userInfoContent ? '成功' : '为空'}`);
+    } catch (e) {
+      console.warn(`[${extension_name}] 获取用户设定描述时出错:`, e);
+      userInfoContent = '';
+    }
+
+    // $C: 角色描述 (char_description)
+    let charInfoContent = '';
+    try {
+      // 按优先级尝试获取角色描述
+      // character 来自 characters[this_chid]
+      // v1CharData.description 或 v1CharData.data.description (v2)
+      charInfoContent = character?.description 
+        || character?.data?.description
+        || context?.name2_description
+        || '';
+      console.log(`[${extension_name}] $C (char_description) 获取结果: ${charInfoContent ? '成功' : '为空'}`);
+    } catch (e) {
+      console.warn(`[${extension_name}] 获取角色描述时出错:`, e);
+      charInfoContent = '';
+    }
+
     const replacements = {
       sulv1: apiSettings.rateMain,
       sulv2: apiSettings.ratePersonal,
@@ -819,6 +854,8 @@ async function runOptimizationLogic(userMessage) {
       $6: lastPlotContent, // [新增] 添加$6占位符及其内容
       $7: '', // [新增] $7用于前文上下文注入，稍后填充
       $8: '', // [新增] $8用于本轮用户输入（从上下文中摘取出来单独注入）
+      $U: userInfoContent, // [新增] $U用于注入用户设定描述 (persona_description)
+      $C: charInfoContent, // [新增] $C用于注入角色描述 (char_description)
     };
 
     // ---- 接力思考流程（$A1/$A2...）----
@@ -1119,8 +1156,9 @@ async function runOptimizationLogic(userMessage) {
         }
       }
 
-      // 使用可能被处理过的 messageForTavern 构建最终消息
-      const finalMessage = `${userMessage}\n\n${finalSystemDirectiveContent}\n${messageForTavern}`;
+      // [优化] 最终消息不再硬编码本轮用户输入，用户可通过 $8 占位符自行决定插入位置
+      // finalSystemDirectiveContent 在提取时已经经过 performReplacements 处理，此处无需重复替换
+      const finalMessage = `${finalSystemDirectiveContent}\n${messageForTavern}`;
 
       if ($toast) toastr.clear($toast);
       if (minLength <= 0) {
