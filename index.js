@@ -951,7 +951,7 @@ async function runOptimizationLogic(userMessage) {
     // 修复：使用更简单可靠的方法提取标签内容，避免复杂的正则表达式问题
     const extractLastBlocksPerTag = (text, tagNames) => {
       if (!text || !Array.isArray(tagNames) || tagNames.length === 0) return null;
-
+      
       // 去重：确保同一个标签名只处理一次（大小写不敏感）
       const uniqueTagNames = [];
       const seen = new Set();
@@ -963,17 +963,29 @@ async function runOptimizationLogic(userMessage) {
         seen.add(lowerTagName);
         uniqueTagNames.push(tagName);
       }
-
+      
       const parts = [];
       for (const tagName of uniqueTagNames) {
         const safeTagName = escapeRegExp(tagName);
         // 使用更精确的正则表达式：匹配完整的标签对
         // 注意：在模板字符串中，\s 和 \S 需要双重转义为 \\s 和 \\S
-        // 使用非贪婪匹配 *? 确保匹配最短的标签对
-        const regex = new RegExp(`<${safeTagName}(?:[^>]*)?>([\\s\\S]*?)<\/${safeTagName}>`, 'gi');
+        // 修复：使用更宽松的匹配模式，确保能匹配包含换行符和任何字符的内容
+        // 使用 [\s\S] 匹配任何字符（包括换行符），使用 *? 非贪婪匹配
+        // 但是要确保匹配到最后一个完整的标签对，所以需要找到所有匹配后取最后一个
+        const regex = new RegExp(`<${safeTagName}(?:\\s+[^>]*)?>([\\s\\S]*?)<\/${safeTagName}>`, 'gi');
         const matches = Array.from(text.matchAll(regex));
+        
+        // 调试：输出原始文本的前500个字符以便排查
+        console.log(`[${extension_name}] [标签提取] 原始文本前500字符:`, text.substring(0, 500));
+        console.log(`[${extension_name}] [标签提取] 正则表达式:`, regex.toString());
 
         console.log(`[${extension_name}] [标签提取] 标签名: ${tagName}, 找到 ${matches.length} 个匹配`);
+        
+        // 调试：输出前100个字符以便排查
+        if (matches.length > 0) {
+          const firstMatch = matches[0][0];
+          console.log(`[${extension_name}] [标签提取] 第一个匹配的前100字符: ${firstMatch.substring(0, 100)}...`);
+        }
 
         if (matches.length > 0) {
           // 只取最后一个匹配的完整标签块
@@ -982,16 +994,25 @@ async function runOptimizationLogic(userMessage) {
           const fullMatch = lastMatch[0];
           if (fullMatch && fullMatch.trim()) {
             console.log(`[${extension_name}] [标签提取] 提取到标签内容，长度: ${fullMatch.length}`);
+            console.log(`[${extension_name}] [标签提取] 提取内容预览: ${fullMatch.substring(0, 200)}...`);
             parts.push(fullMatch);
           } else {
             console.log(`[${extension_name}] [标签提取] 匹配到的标签为空或只包含空白字符`);
+            console.log(`[${extension_name}] [标签提取] 调试信息 - fullMatch:`, JSON.stringify(fullMatch));
           }
         } else {
           console.log(`[${extension_name}] [标签提取] 未找到标签: ${tagName}`);
+          // 调试：检查文本中是否包含标签
+          const hasOpenTag = text.includes(`<${tagName}`);
+          const hasCloseTag = text.includes(`</${tagName}`);
+          console.log(`[${extension_name}] [标签提取] 调试信息 - 包含开始标签: ${hasOpenTag}, 包含结束标签: ${hasCloseTag}`);
         }
       }
       const result = parts.length > 0 ? parts.join('\n\n') : null;
       console.log(`[${extension_name}] [标签提取] 最终结果: ${result ? `提取成功，长度 ${result.length}` : '未提取到任何内容'}`);
+      if (result) {
+        console.log(`[${extension_name}] [标签提取] 最终结果预览: ${result.substring(0, 300)}...`);
+      }
       return result;
     };
     const normalizeRelayFlows = rawFlows => {
@@ -1268,15 +1289,27 @@ async function runOptimizationLogic(userMessage) {
           .map(t => t.trim())
           .filter(t => t);
         if (tagNames.length > 0) {
+          // 调试：输出原始消息的前1000个字符
+          console.log(`[${extension_name}] [标签提取] 开始提取标签: ${tagNames.join(', ')}`);
+          console.log(`[${extension_name}] [标签提取] 原始消息类型: ${typeof processedMessage}, 长度: ${processedMessage?.length || 0}`);
+          console.log(`[${extension_name}] [标签提取] 原始消息前1000字符:`, processedMessage?.substring(0, 1000) || 'null');
+          
           const extracted = extractLastBlocksPerTag(processedMessage, tagNames);
           if (extracted) {
             messageForTavern = extracted;
             console.log(`[${extension_name}] 成功按标签分别摘取最后一次匹配: ${tagNames.join(', ')}`);
             console.log(`[${extension_name}] 提取的内容长度: ${extracted.length}, 原始内容长度: ${processedMessage.length}`);
+            console.log(`[${extension_name}] 提取的内容前500字符:`, extracted.substring(0, 500));
             toastr.info(`已成功按标签分别摘取最后一次匹配并注入。`, '标签摘取');
           } else {
             console.log(`[${extension_name}] 在回复中未找到指定标签: ${tagNames.join(', ')}`);
             console.log(`[${extension_name}] 将使用完整回复内容（长度: ${processedMessage.length}）`);
+            // 调试：尝试手动查找标签
+            for (const tagName of tagNames) {
+              const hasOpen = processedMessage.includes(`<${tagName}`);
+              const hasClose = processedMessage.includes(`</${tagName}`);
+              console.log(`[${extension_name}] [调试] 标签 ${tagName}: 包含开始标签=${hasOpen}, 包含结束标签=${hasClose}`);
+            }
           }
         }
       }
