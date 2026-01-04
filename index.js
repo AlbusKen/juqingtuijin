@@ -862,10 +862,10 @@ async function runOptimizationLogic(userMessage) {
     const deepClone = obj => JSON.parse(JSON.stringify(obj));
     // 多标签提取规则：对每个标签分别取"最后一个匹配到的完整标签块"，再按标签顺序拼接
     // 自动去重：同一个标签名（大小写不敏感）只处理一次
-    // 重要：使用否定前瞻确保标签内部不包含同名开始标签（处理未闭合标签的情况）
+    // 修复：使用更简单可靠的方法提取标签内容，避免复杂的正则表达式问题
     const extractLastBlocksPerTag = (text, tagNames) => {
       if (!text || !Array.isArray(tagNames) || tagNames.length === 0) return null;
-      
+
       // 去重：确保同一个标签名只处理一次（大小写不敏感）
       const uniqueTagNames = [];
       const seen = new Set();
@@ -877,22 +877,36 @@ async function runOptimizationLogic(userMessage) {
         seen.add(lowerTagName);
         uniqueTagNames.push(tagName);
       }
-      
+
       const parts = [];
       for (const tagName of uniqueTagNames) {
         const safeTagName = escapeRegExp(tagName);
-        // 改进的正则：使用否定前瞻，确保标签内部不包含同名的开始标签
-        // 这样可以正确处理"第一个标签未闭合，但后面有闭合的同名标签"的情况
-        const regex = new RegExp(`(<${safeTagName}[^>]*>(?:(?!<${safeTagName}[^>]*>)[\\s\\S])*?<\\/${safeTagName}>)`, 'gi');
+        // 使用更精确的正则表达式：匹配完整的标签对
+        // 注意：在模板字符串中，\s 和 \S 需要双重转义为 \\s 和 \\S
+        // 使用非贪婪匹配 *? 确保匹配最短的标签对
+        const regex = new RegExp(`<${safeTagName}(?:[^>]*)?>([\\s\\S]*?)<\/${safeTagName}>`, 'gi');
         const matches = Array.from(text.matchAll(regex));
+
+        console.log(`[${extension_name}] [标签提取] 标签名: ${tagName}, 找到 ${matches.length} 个匹配`);
+
         if (matches.length > 0) {
-          // 只取最后一个匹配
-          const last = matches[matches.length - 1];
-          const block = last?.[1] || last?.[0];
-          if (block) parts.push(block);
+          // 只取最后一个匹配的完整标签块
+          const lastMatch = matches[matches.length - 1];
+          // 使用完整匹配（包含标签），而不是只使用捕获组
+          const fullMatch = lastMatch[0];
+          if (fullMatch && fullMatch.trim()) {
+            console.log(`[${extension_name}] [标签提取] 提取到标签内容，长度: ${fullMatch.length}`);
+            parts.push(fullMatch);
+          } else {
+            console.log(`[${extension_name}] [标签提取] 匹配到的标签为空或只包含空白字符`);
+          }
+        } else {
+          console.log(`[${extension_name}] [标签提取] 未找到标签: ${tagName}`);
         }
       }
-      return parts.length > 0 ? parts.join('\n\n') : null;
+      const result = parts.length > 0 ? parts.join('\n\n') : null;
+      console.log(`[${extension_name}] [标签提取] 最终结果: ${result ? `提取成功，长度 ${result.length}` : '未提取到任何内容'}`);
+      return result;
     };
     const normalizeRelayFlows = rawFlows => {
       const flows = Array.isArray(rawFlows) ? rawFlows : [];
@@ -1149,9 +1163,11 @@ async function runOptimizationLogic(userMessage) {
           if (extracted) {
             messageForTavern = extracted;
             console.log(`[${extension_name}] 成功按标签分别摘取最后一次匹配: ${tagNames.join(', ')}`);
+            console.log(`[${extension_name}] 提取的内容长度: ${extracted.length}, 原始内容长度: ${processedMessage.length}`);
             toastr.info(`已成功按标签分别摘取最后一次匹配并注入。`, '标签摘取');
           } else {
             console.log(`[${extension_name}] 在回复中未找到指定标签: ${tagNames.join(', ')}`);
+            console.log(`[${extension_name}] 将使用完整回复内容（长度: ${processedMessage.length}）`);
           }
         }
       }
