@@ -745,7 +745,7 @@ function normalizeRelayFlows(rawFlows) {
         injectKey,
         enabled: f.enabled !== false,
         prompts: Array.isArray(f.prompts) ? f.prompts : [],
-        lastOutput: String(f.lastOutput ?? ''),
+        // [移除] lastOutput 不再保存在设置中，完全依赖聊天记录
         extractTags: String(f.extractTags ?? ''), // 每个流程独立的标签摘取
         apiProfileId: String(f.apiProfileId ?? ''), // 流程单独选择API配置；空=使用当前
       };
@@ -869,7 +869,6 @@ function renderRelayFlows(panel, flows) {
             <button class="menu_button qrf_relay_flow_up" title="上移" ${idx === 0 ? 'disabled' : ''}><i class="fa-solid fa-arrow-up"></i></button>
             <button class="menu_button qrf_relay_flow_down" title="下移" ${idx === normalized.length - 1 ? 'disabled' : ''}><i class="fa-solid fa-arrow-down"></i></button>
             <button class="menu_button qrf_relay_flow_edit" title="编辑提示词"><i class="fa-solid fa-pen-to-square"></i> 编辑</button>
-            <button class="menu_button qrf_relay_flow_clear" title="清空输出"><i class="fa-solid fa-eraser"></i> 清空输出</button>
             <button class="menu_button qrf_danger_btn qrf_relay_flow_delete" title="删除流程"><i class="fa-solid fa-trash"></i> 删除</button>
           </div>
         </div>
@@ -886,7 +885,8 @@ function renderRelayFlows(panel, flows) {
     item.find('.qrf_relay_flow_name').val(flow.name);
     item.find('.qrf_relay_flow_extract_tags').val(flow.extractTags || '');
     item.find('.qrf_relay_flow_api_profile_select').val(flow.apiProfileId || '');
-    item.find('.qrf_relay_flow_preview').text(flow.lastOutput ? flow.lastOutput : '(暂无输出)');
+    // [修改] 不再从设置中读取 lastOutput，数据现在完全存储在聊天记录中
+    item.find('.qrf_relay_flow_preview').text('(数据从聊天记录读取)');
 
     container.append(item);
   });
@@ -1591,7 +1591,7 @@ export function initializeBindings() {
       injectKey,
       enabled: true,
       prompts: deepClone(getMergedApiSettings().prompts || []), // 默认复制当前基础提示词
-      lastOutput: '',
+      // [移除] lastOutput 不再需要，数据完全存储在聊天记录中
       extractTags: '',
     };
     const next = [...flows, newFlow];
@@ -1706,19 +1706,7 @@ export function initializeBindings() {
     toastr.success(`已应用API配置 "${p.name}"。`);
   });
 
-  panel.on('click', '#qrf_clear_all_relay_outputs_btn', async function () {
-    const flows = getRelayFlowsFromSettings();
-    if (flows.length === 0) {
-      toastr.info('当前没有任何流程。');
-      return;
-    }
-    if (!confirm('确定要清空所有 $A* 注入输出吗？这不会删除流程提示词，只会把已保存的输出重置为空。')) {
-      return;
-    }
-    const next = flows.map(f => ({ ...f, lastOutput: '' }));
-    await saveRelayFlows(next);
-    toastr.success('已清空所有注入输出。');
-  });
+  // [移除] 清空所有输出按钮及其事件处理已移除，因为数据现在完全存储在聊天记录中
 
   panel.on('click', '.qrf_relay_flow_edit', function () {
     const flowId = $(this).closest('.qrf_relay_flow_item').data('id');
@@ -1741,12 +1729,7 @@ export function initializeBindings() {
     if (next) await saveRelayFlows(next);
   });
 
-  panel.on('click', '.qrf_relay_flow_clear', async function () {
-    const flowId = $(this).closest('.qrf_relay_flow_item').data('id');
-    if (!confirm('确定要清空该流程的最新输出吗？（不会删除提示词）')) return;
-    const next = updateRelayFlowById(String(flowId), f => ({ ...f, lastOutput: '' }));
-    if (next) await saveRelayFlows(next);
-  });
+  // [移除] 清空单个流程输出按钮及其事件处理已移除，因为数据现在完全存储在聊天记录中
 
   panel.on('click', '.qrf_relay_flow_delete', async function () {
     const flowId = $(this).closest('.qrf_relay_flow_item').data('id');

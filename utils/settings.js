@@ -134,6 +134,7 @@ export const defaultSettings = {
     rateCuckold: 10,
     selectedWorldbooks: [], // 新增：存储选中的世界书
     disabledWorldbookEntries: '__ALL_SELECTED__', // [功能更新] 默认全选所有条目，支持屏蔽词过滤
+    relayFlowHistoryRetention: 3, // [新增] 接力思考流程历史保留层数（默认3层）
     // [新增] 接力思考流程：多套提示词链式执行，并把输出缓存到 $A1/$A2... 供后续提示词注入
     // 数据结构:
     // relayFlows: Array<{

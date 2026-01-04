@@ -13,6 +13,7 @@ console.log('[剧情优化大师] v3.5.1 Loading... (Timestamp: ' + Date.now() +
 const extension_name = 'juqingtuijin';
 let isProcessing = false;
 let tempPlotToSave = null; // [架构重构] 用于在生成和消息创建之间临时存储plot
+let tempRelayFlowsToSave = null; // [新增] 用于在生成和消息创建之间临时存储接力思考流程输出 { $A1: content, $A2: content, ... }
 let currentAbortController_QRF = null; // [新增] 用于中止正在进行的AI请求（剧情规划）
 let wasStoppedByUser_QRF = false; // [新增] 标记本次规划是否被用户手动终止
 
@@ -598,6 +599,65 @@ function getPlotFromHistory() {
 }
 
 /**
+ * [新增] 从聊天记录中反向查找最新的接力思考流程输出（$A1, $A2等）。
+ * @param {string} injectKey - 占位符键名，如 "$A1", "$A2"
+ * @returns {string} - 返回找到的内容，否则返回空字符串。
+ */
+function getRelayFlowFromHistory(injectKey) {
+  const context = getContext();
+  if (!context || !context.chat || context.chat.length === 0) {
+    return '';
+  }
+
+  // 从后往前遍历查找
+  for (let i = context.chat.length - 1; i >= 0; i--) {
+    const message = context.chat[i];
+    if (message.qrf_relayFlows && message.qrf_relayFlows[injectKey]) {
+      console.log(`[${extension_name}] Found relay flow ${injectKey} in message ${i}`);
+      return message.qrf_relayFlows[injectKey];
+    }
+  }
+  return '';
+}
+
+/**
+ * [新增] 清理超过保留层数的旧接力思考流程数据
+ * @param {number} retentionLayers - 保留层数
+ */
+function cleanupOldRelayFlowData(retentionLayers = 3) {
+  const context = getContext();
+  if (!context || !context.chat || context.chat.length === 0) {
+    return;
+  }
+
+  // 收集所有包含接力思考流程数据的AI消息索引（只处理AI消息）
+  const messagesWithRelayFlows = [];
+  for (let i = context.chat.length - 1; i >= 0; i--) {
+    const message = context.chat[i];
+    // 只处理AI消息中的接力思考流程数据
+    if (!message.is_user && message.qrf_relayFlows && typeof message.qrf_relayFlows === 'object') {
+      messagesWithRelayFlows.push(i);
+    }
+  }
+
+  // 如果超过保留层数，删除旧数据
+  if (messagesWithRelayFlows.length > retentionLayers) {
+    const toDelete = messagesWithRelayFlows.slice(retentionLayers);
+    let deletedCount = 0;
+    for (const index of toDelete) {
+      const message = context.chat[index];
+      if (message.qrf_relayFlows) {
+        delete message.qrf_relayFlows;
+        deletedCount++;
+      }
+    }
+    if (deletedCount > 0) {
+      console.log(`[${extension_name}] 清理了 ${deletedCount} 条旧接力思考流程数据（保留最新 ${retentionLayers} 层）`);
+    }
+  }
+}
+
+/**
  * [架构重构] 将plot附加到最新的AI消息上。
  */
 async function savePlotToLatestMessage() {
@@ -626,6 +686,30 @@ async function savePlotToLatestMessage() {
     }
     // 无论成功或失败，都清空临时变量，避免污染下一次生成
     tempPlotToSave = null;
+  }
+
+  // [新增] 保存接力思考流程数据
+  if (tempRelayFlowsToSave) {
+    const context = getContext();
+    if (context.chat.length > 0) {
+      const lastMessage = context.chat[context.chat.length - 1];
+      // 确保是AI消息，然后保存接力思考流程数据
+      if (lastMessage && !lastMessage.is_user) {
+        if (!lastMessage.qrf_relayFlows) {
+          lastMessage.qrf_relayFlows = {};
+        }
+        // 合并保存所有接力思考流程的输出
+        Object.assign(lastMessage.qrf_relayFlows, tempRelayFlowsToSave);
+        console.log(`[${extension_name}] Relay flows data attached to the latest AI message:`, Object.keys(tempRelayFlowsToSave));
+        
+        // 清理超过保留层数的旧数据
+        const settings = extension_settings[extension_name] || {};
+        const retentionLayers = settings.apiSettings?.relayFlowHistoryRetention ?? 3;
+        cleanupOldRelayFlowData(retentionLayers);
+      }
+    }
+    // 无论成功或失败，都清空临时变量，避免污染下一次生成
+    tempRelayFlowsToSave = null;
   }
 }
 
@@ -670,6 +754,8 @@ async function runOptimizationLogic(userMessage) {
     // 重置中止控制器与标志（参考数据库版本的终止按钮行为）
     wasStoppedByUser_QRF = false;
     currentAbortController_QRF = new AbortController();
+    // [新增] 重置接力思考流程临时存储
+    tempRelayFlowsToSave = null;
 
     // 创建带"终止"按钮的 Toast
     const toastMsg = `
@@ -931,7 +1017,7 @@ async function runOptimizationLogic(userMessage) {
           injectKey,
           enabled: f.enabled !== false,
           prompts: Array.isArray(f.prompts) ? f.prompts : [],
-          lastOutput: String(f.lastOutput ?? ''),
+          // [移除] 不再保存 lastOutput 到设置中，完全依赖聊天记录
           extractTags: String(f.extractTags ?? ''),
           apiProfileId: String(f.apiProfileId ?? ''),
         });
@@ -979,43 +1065,58 @@ async function runOptimizationLogic(userMessage) {
     if (slicedContext && Array.isArray(slicedContext)) {
       fullHistory = [...slicedContext];
     }
-    const formattedHistory = fullHistory.map(msg => `${msg.role}："${sanitizeHtml(msg.content)}"`).join(' \n ');
+    // [优化] $7只显示AI回复内容，不显示角色标签和用户输入
+    const formattedHistory = fullHistory
+      .filter(msg => msg.role === 'assistant') // 确保只包含AI回复
+      .map(msg => sanitizeHtml(msg.content)) // 只提取内容，不显示角色标签
+      .filter(content => content && content.trim()) // 过滤空内容
+      .join('\n\n'); // 使用双换行分隔，更清晰
 
     // $8：本轮用户输入（从上下文数据中摘取出来单独注入）
     replacements.$8 = userMessage ? sanitizeHtml(userMessage) : '';
 
-    // 构建$7上下文注入内容（仅前文上下文；不包含本轮用户输入）
+    // 构建$7上下文注入内容（仅前文AI回复；不包含用户输入）
     const contextInjectionText = formattedHistory && formattedHistory.trim()
-      ? `以下是前文的用户记录和故事发展，给你用作参考：\n ${formattedHistory}`
+      ? `以下是前文的AI回复历史，给你用作参考：\n\n${formattedHistory}`
       : '';
     replacements.$7 = contextInjectionText; // 设置$7的值
 
-    // 预先载入已保存的 $A* 输出（即使本轮流程不启用，也允许基础提示词引用旧输出）
+    // 预先载入已保存的 $A* 输出（完全从聊天记录读取，即使本轮流程不启用，也允许基础提示词引用旧输出）
     let relayFlows = normalizeRelayFlows(apiSettings.relayFlows || []);
     relayFlows.forEach(f => {
-      if (f && f.injectKey) replacements[f.injectKey] = f.lastOutput || '';
+      if (f && f.injectKey) {
+        // [修改] 完全从聊天记录读取，不再使用设置中的临时存储
+        const fromHistory = getRelayFlowFromHistory(f.injectKey);
+        replacements[f.injectKey] = fromHistory || '';
+      }
     });
 
-    // 先执行“接力流程”，再构建基础 prompts 的 messages
+    // 先执行"接力流程"，再构建基础 prompts 的 messages
     const persistRelayFlows = updatedFlows => {
       try {
+        // [修改] 在保存前清除所有 lastOutput 字段，因为现在完全依赖聊天记录
+        const flowsToSave = updatedFlows.map(flow => {
+          const { lastOutput, ...flowWithoutOutput } = flow;
+          return flowWithoutOutput;
+        });
+
         if (!extension_settings[extension_name]) extension_settings[extension_name] = {};
         if (!extension_settings[extension_name].apiSettings) extension_settings[extension_name].apiSettings = {};
-        extension_settings[extension_name].apiSettings.relayFlows = deepClone(updatedFlows);
+        extension_settings[extension_name].apiSettings.relayFlows = deepClone(flowsToSave);
 
-        // 如果当前启用了预设，同时把输出写回预设，以便切换预设时仍保留
+        // 如果当前启用了预设，同时把输出写回预设（也不包含lastOutput）
         const s = extension_settings[extension_name];
         const presetName = s?.lastUsedPresetName;
         const presetsAll = s?.promptPresets;
         if (presetName && Array.isArray(presetsAll)) {
           const idx = presetsAll.findIndex(p => p && p.name === presetName);
           if (idx !== -1) {
-            presetsAll[idx].relayFlows = deepClone(updatedFlows);
+            presetsAll[idx].relayFlows = deepClone(flowsToSave);
           }
         }
         saveSettings();
       } catch (e) {
-        console.warn(`[${extension_name}] 保存接力流程输出失败:`, e);
+        console.warn(`[${extension_name}] 保存接力流程配置失败:`, e);
       }
     };
 
@@ -1069,9 +1170,17 @@ async function runOptimizationLogic(userMessage) {
             }
           }
 
-          relayFlows[i].lastOutput = injected;
+          // [移除] 不再保存到 relayFlows[i].lastOutput，完全依赖聊天记录
           // 写入占位符，供后续流程 / 基础提示词使用
-          replacements[flow.injectKey] = relayFlows[i].lastOutput;
+          replacements[flow.injectKey] = injected;
+          
+          // [新增] 保存到临时变量，等待GENERATION_ENDED事件时写入聊天记录
+          if (!tempRelayFlowsToSave) {
+            tempRelayFlowsToSave = {};
+          }
+          tempRelayFlowsToSave[flow.injectKey] = injected;
+          
+          // [修改] 保存流程配置（但不包含lastOutput）
           persistRelayFlows(relayFlows);
         }
       }
